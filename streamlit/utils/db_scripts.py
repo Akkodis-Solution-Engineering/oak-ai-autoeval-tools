@@ -80,12 +80,17 @@ def get_db_connection():
         conn: connection object to interact with the database.
     """
     try:
+        # Check if connecting to Azure PostgreSQL (requires SSL)
+        host = get_env_variable("DB_HOST")
+        is_azure = "azure.com" in host if host else False
+
         conn = psycopg2.connect(
             dbname=get_env_variable("DB_NAME"),
             user=get_env_variable("DB_USER"),
             password=get_env_variable("DB_PASSWORD"),
-            host=get_env_variable("DB_HOST"),
-            port=get_env_variable("DB_PORT")
+            host=host,
+            port=get_env_variable("DB_PORT"),
+            sslmode='require' if is_azure else 'prefer'
         )
         return conn
     except psycopg2.Error as e:

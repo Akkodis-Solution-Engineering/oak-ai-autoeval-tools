@@ -174,13 +174,23 @@ if 'llm_model_temp' not in st.session_state:
 
 llm_model_options = ['o1-preview-2024-09-12','o1-mini-2024-09-12','gpt-4o-mini-2024-07-18', "gpt-4o",
     "gpt-4o-mini",'gpt-4o-2024-05-13','gpt-4o-2024-08-06','chatgpt-4o-latest',
-                     'gpt-4-turbo-2024-04-09','gpt-4-0125-preview','gpt-4-1106-preview']
+                     'gpt-4-turbo-2024-04-09','gpt-4-0125-preview','gpt-4-1106-preview','azure-openai']
 
+# Get default value, ensuring it's in the options list
+default_model = st.session_state.llm_model
+if isinstance(default_model, str):
+    # If it's a single string, convert to list
+    default_list = [default_model] if default_model in llm_model_options else ['gpt-4o-2024-05-13']
+else:
+    # If it's already a list, filter to only include valid options
+    default_list = [m for m in default_model if m in llm_model_options]
+    if not default_list:
+        default_list = ['gpt-4o-2024-05-13']
 
 st.session_state.llm_model = st.multiselect(
     'Select models for lesson plan generation:',
     llm_model_options,
-    default=[st.session_state.llm_model] if isinstance(st.session_state.llm_model, str) else st.session_state.llm_model
+    default=default_list
 )
 st.session_state.llm_model
 

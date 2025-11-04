@@ -15,13 +15,14 @@ import json
 
 import pandas as pd
 import streamlit as st
-from openai import OpenAI
+from openai import OpenAI, AzureOpenAI
 from openai import OpenAIError
 
 from utils.common_utils import (
     clear_all_caches,
     log_message,
-    render_prompt
+    render_prompt,
+    get_env_variable
 )
 from utils.formatting import (
     generate_experiment_placeholders,
@@ -49,7 +50,7 @@ from utils.constants import (
 
 def create_eval(sample_id, prompt_id, experiment_id, limit, llm_model,
         llm_model_temp, top_p=1):
-    """ Run a test for each lesson plan associated with a sample and add 
+    """ Run a test for each lesson plan associated with a sample and add
     results to the database.
 
     Args:
@@ -88,6 +89,15 @@ def create_eval(sample_id, prompt_id, experiment_id, limit, llm_model,
     lesson_plans = get_lesson_plans_by_id(sample_id, limit)
     total_lessons = len(lesson_plans)
 
+    # Determine the actual model name to use in the batch request
+    # For Azure, we need to use the deployment name
+    if llm_model.startswith("azure-") or llm_model.lower() == "azure-openai":
+        deployment_name = get_env_variable("AZURE_OPENAI_DEPLOYMENT_NAME")
+        model_for_request = deployment_name
+        log_message("info", f"Using Azure OpenAI deployment: {deployment_name}")
+    else:
+        model_for_request = llm_model
+
     for i, lesson in enumerate(lesson_plans):
         lesson_plan_id = lesson[0]
         lesson_id = lesson[1]
@@ -96,10 +106,10 @@ def create_eval(sample_id, prompt_id, experiment_id, limit, llm_model,
         content = decode_lesson_json(lesson_json_str, lesson_plan_id, lesson_id, i)
         if content is None:
             continue
-        
+
         cleaned_prompt_details = process_prompt(prompt_details)
         prompt = render_prompt(content, cleaned_prompt_details)
-        
+
         if "Prompt details are missing" in prompt or "Missing data" in prompt:
             st.write(f"Skipping lesson {i + 1} of {total_lessons} due to missing prompt data.")
         else:
@@ -110,7 +120,7 @@ def create_eval(sample_id, prompt_id, experiment_id, limit, llm_model,
                 "method": "POST",
                 "url": "/v1/chat/completions",
                 "body": {
-                    "model": llm_model,
+                    "model": model_for_request,
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": llm_model_temp,
                     "top_p": top_p,
@@ -121,6 +131,34 @@ def create_eval(sample_id, prompt_id, experiment_id, limit, llm_model,
             # Append the dictionary to the evaluations list
             st.session_state.evaluations_list.append(eval_entry)
         
+
+def initialize_client(llm_model):
+    """Initialize the appropriate OpenAI client based on the model selection.
+
+    Args:
+        llm_model (str): The model name selected by the user
+
+    Returns:
+        OpenAI or AzureOpenAI client instance
+    """
+    if llm_model.startswith("azure-") or llm_model.lower() == "azure-openai":
+        # Initialize Azure OpenAI client
+        api_key = get_env_variable("AZURE_OPENAI_API_KEY")
+        endpoint = get_env_variable("AZURE_OPENAI_ENDPOINT")
+        api_version = get_env_variable("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
+
+        log_message("info", f"Initializing Azure OpenAI client for batch processing")
+        log_message("info", f"Endpoint: {endpoint}, API Version: {api_version}")
+
+        return AzureOpenAI(
+            api_key=api_key,
+            api_version=api_version,
+            azure_endpoint=endpoint
+        )
+    else:
+        # Initialize standard OpenAI client
+        return OpenAI()
+
 
 def add_to_batch(
     experiment_name,
@@ -155,14 +193,14 @@ def add_to_batch(
                     llm_model_temp, top_p
                 )
         return experiment_id
-        
+
     except Exception as e:
         log_message("error", f"An error occurred during the experiment: {e}")
         return False
 
 
-# Initialize the OpenAI client
-client = OpenAI()
+# Initialize the OpenAI client (will be replaced dynamically based on model selection)
+client = None
 
 # Set page configuration
 st.set_page_config(page_title="Batch AutoEval", page_icon="🤖")
@@ -425,7 +463,8 @@ llm_model_options = [
     "gpt-4o-2024-05-13",
     "gpt-4-turbo-2024-04-09",
     "gpt-4o",
-    "gpt-4o-mini"
+    "gpt-4o-mini",
+    "azure-openai"
 ]
 
 st.session_state.llm_model = st.selectbox(
@@ -493,7 +532,7 @@ with st.form(key="experiment_form"):
 
     if st.form_submit_button("Submit batch"):
         st.warning("Please do not close the page until batch submission is confirmed.")
-        experiment_id = add_to_batch(   
+        experiment_id = add_to_batch(
             experiment_name,
             exp_description,
             sample_ids,
@@ -506,30 +545,44 @@ with st.form(key="experiment_form"):
             st.session_state.top_p
         )
 
+        # Initialize the appropriate client based on the selected model
+        client = initialize_client(st.session_state.llm_model)
+
         # Convert the list of dictionaries to JSONL format in-memory
         jsonl_data = io.BytesIO()
         for entry in st.session_state.evaluations_list:
             jsonl_data.write((json.dumps(entry) + "\n").encode('utf-8'))
         jsonl_data.seek(0)  # Reset the pointer to the beginning of the BytesIO object
 
-        # Upload the in-memory JSONL data to OpenAI
-        batch_input_file = client.files.create(
-            file=jsonl_data,
-            purpose="batch"
-        )
+        # Upload the in-memory JSONL data to OpenAI/Azure OpenAI
+        try:
+            log_message("info", f"Uploading batch file with {len(st.session_state.evaluations_list)} entries")
+            batch_input_file = client.files.create(
+                file=jsonl_data,
+                purpose="batch"
+            )
+            log_message("info", f"Batch file uploaded successfully. File ID: {batch_input_file.id}")
+        except OpenAIError as e:
+            st.error(f"Failed to upload batch file: {e.user_message}")
+            log_message("error", f"Batch file upload failed: {e}")
+            st.stop()
 
         # Create batch and capture the response
         try:
+            log_message("info", "Creating batch job")
             batch_object = client.batches.create(
                 input_file_id=batch_input_file.id,
                 endpoint="/v1/chat/completions",
                 completion_window="24h",
                 metadata={"description": batch_description}
             )
+            log_message("info", f"Batch job created successfully. Batch ID: {batch_object.id}")
         except OpenAIError as e:
             # Print detailed error message for troubleshooting
-            st.write("Failed to create batch with error:", e.http_status, e.user_message)
+            st.error(f"Failed to create batch with error: {e.user_message}")
             st.write("Error details:", e.json_body if hasattr(e, 'json_body') else "No details available")
+            log_message("error", f"Batch creation failed: {e}")
+            st.stop()
 
         batch_id = batch_object.id
         batch_num_id = add_batch(batch_id, experiment_id, batch_description, st.session_state.created_by)
