@@ -1,3 +1,4 @@
+
 # azure-pipelines.yml
 
 trigger: none
@@ -6,6 +7,8 @@ variables:
   imageName1: 'akkodis-b9gjbfgfdrajfrb6.azurecr.io/oak-ai-autoeval'  # Update ACR registry and image name as needed
   tag: '$(Build.BuildId)'
   gitsha: '$(Build.SourceVersion)'
+  acrName: 'akkodis'
+  azureSubscription: 'Akkodis SensAI'
 
 stages:
   - stage: BuildAndPushContainer
@@ -24,17 +27,17 @@ stages:
               dockerVersion: '24.0.0'
 
           - task: AzureCLI@2
-            displayName: 'ACR Login, Build, and Push to First ACR'
+            displayName: 'ACR Login, Build, and Push to ACR'
             inputs:
-              azureSubscription: 'Akkodis SensAI'
+              azureSubscription: $(azureSubscription)
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
                 # Login to Azure Container Registry
-                az acr login --name akkodis-b9gjbfgfdrajfrb6
+                az acr login --name $(acrName)
 
                 # Create and use buildx builder for multi-platform builds
-                docker buildx create --use
+                docker buildx create --use || true
 
                 # Build and push multi-platform image (ARM64 + AMD64)
                 docker buildx build --platform linux/arm64,linux/amd64 \
