@@ -90,11 +90,13 @@ def create_eval(sample_id, prompt_id, experiment_id, limit, llm_model,
     total_lessons = len(lesson_plans)
 
     # Determine the actual model name to use in the batch request
-    # For Azure, we need to use the deployment name
+    # For Azure, we need to use the batch deployment name (requires globalbatch or datazonebatch SKU)
     if llm_model.startswith("azure-") or llm_model.lower() == "azure-openai":
-        deployment_name = get_env_variable("AZURE_OPENAI_DEPLOYMENT_NAME")
+        # Try to get batch-specific deployment first, fall back to regular deployment
+        deployment_name = get_env_variable("AZURE_OPENAI_BATCH_DEPLOYMENT_NAME",
+                                          get_env_variable("AZURE_OPENAI_DEPLOYMENT_NAME"))
         model_for_request = deployment_name
-        log_message("info", f"Using Azure OpenAI deployment: {deployment_name}")
+        log_message("info", f"Using Azure OpenAI deployment for batch: {deployment_name}")
     else:
         model_for_request = llm_model
 
@@ -557,29 +559,36 @@ with st.form(key="experiment_form"):
         # Upload the in-memory JSONL data to OpenAI/Azure OpenAI
         try:
             log_message("info", f"Uploading batch file with {len(st.session_state.evaluations_list)} entries")
+            # Add a proper filename for the BytesIO object (required by Azure OpenAI)
+            jsonl_data.name = "batch_input.jsonl"
             batch_input_file = client.files.create(
                 file=jsonl_data,
                 purpose="batch"
             )
             log_message("info", f"Batch file uploaded successfully. File ID: {batch_input_file.id}")
         except OpenAIError as e:
-            st.error(f"Failed to upload batch file: {e.user_message}")
+            st.error(f"Failed to upload batch file: {str(e)}")
             log_message("error", f"Batch file upload failed: {e}")
             st.stop()
 
         # Create batch and capture the response
         try:
             log_message("info", "Creating batch job")
-            batch_object = client.batches.create(
-                input_file_id=batch_input_file.id,
-                endpoint="/v1/chat/completions",
-                completion_window="24h",
-                metadata={"description": batch_description}
-            )
+            # Prepare batch creation parameters
+            batch_params = {
+                "input_file_id": batch_input_file.id,
+                "endpoint": "/v1/chat/completions",
+                "completion_window": "24h"
+            }
+            # Only add metadata if batch_description is not empty (Azure OpenAI requirement)
+            if batch_description and batch_description.strip():
+                batch_params["metadata"] = {"description": batch_description}
+
+            batch_object = client.batches.create(**batch_params)
             log_message("info", f"Batch job created successfully. Batch ID: {batch_object.id}")
         except OpenAIError as e:
             # Print detailed error message for troubleshooting
-            st.error(f"Failed to create batch with error: {e.user_message}")
+            st.error(f"Failed to create batch with error: {str(e)}")
             st.write("Error details:", e.json_body if hasattr(e, 'json_body') else "No details available")
             log_message("error", f"Batch creation failed: {e}")
             st.stop()
