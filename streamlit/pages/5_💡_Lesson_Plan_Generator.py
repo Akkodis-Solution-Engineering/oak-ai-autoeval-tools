@@ -269,13 +269,6 @@ st.session_state.top_p = st.number_input(
     help='Minimum value is 0.0, maximum value is 1.00.'
 )
 
-
-
-
-endpoint = get_env_variable("ENDPOINT")
-username = get_env_variable("USERNAME")
-credential = get_env_variable("CREDENTIAL")
-
 # Usage in Streamlit form
 with st.form(key='generation_form'):
     if st.form_submit_button('Start Generation'):
