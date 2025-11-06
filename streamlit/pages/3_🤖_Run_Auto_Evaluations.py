@@ -386,6 +386,37 @@ with st.form(key="experiment_form"):
 
     if st.form_submit_button("Run evaluation"):
         st.warning("Please do not close the page until the evaluation is complete.")
+
+        # Display evaluation configuration summary
+        st.markdown("### 📋 Evaluation Configuration")
+        with st.expander("View Evaluation Inputs", expanded=True):
+            st.markdown("#### Selected Prompts:")
+            for prompt_info in selected_prompts_info:
+                st.write(f"- **{prompt_info['Prompt']}** ({prompt_info['Output Format']})")
+                st.write(f"  - Lesson Plan Parameters: `{prompt_info['Lesson Plan Params']}`")
+
+            st.markdown("#### Selected Datasets:")
+            for sample in sample_options:
+                num_lessons = samples_table[samples_table["Sample"] == sample][ColumnLabels.NUM_LESSONS].iloc[0]
+                st.write(f"- **{sample}** ({num_lessons} lesson plans)")
+
+            st.markdown("#### Model Configuration:")
+            st.write(f"- **Model:** {st.session_state.llm_model}")
+            st.write(f"- **Temperature:** {st.session_state.llm_model_temp}")
+            st.write(f"- **Top-p:** {st.session_state.top_p}")
+            st.write(f"- **Limit per dataset:** {st.session_state.limit}")
+
+            st.markdown("#### Experiment Details:")
+            st.write(f"- **Name:** {experiment_name}")
+            st.write(f"- **Description:** {exp_description}")
+            st.write(f"- **Created by:** {st.session_state.created_by}")
+            st.write(f"- **Tracked:** {tracked}")
+
+            total_evaluations = st.session_state.limit * len(prompt_ids) * len(sample_ids)
+            st.info(f"📊 **Total evaluations to run:** {total_evaluations}")
+
+        st.markdown("---")
+
         experiment_complete = start_experiment(
             experiment_name,
             exp_description,

@@ -170,26 +170,112 @@ with upload_tab2:
                 if len(json_records) > 3:
                     st.info(f"Showing first 3 of {len(json_records)} records")
 
+                # Display extracted metadata
+                st.write("### Extracted Metadata Preview")
+                metadata_preview = []
+
+                # Level to Key Stage conversion mapping (for preview)
+                level_to_keystage_preview = {
+                    'kindergarten': 'Key Stage 1',
+                    'pre-primary': 'Key Stage 1',
+                    'year 1': 'Key Stage 1',
+                    'year 2': 'Key Stage 1',
+                    'year 3': 'Key Stage 2',
+                    'year 4': 'Key Stage 2',
+                    'year 5': 'Key Stage 2',
+                    'year 6': 'Key Stage 2',
+                    'year 7': 'Key Stage 3',
+                    'year 8': 'Key Stage 3',
+                    'year 9': 'Key Stage 3',
+                    'year 10': 'Key Stage 4',
+                    'year 11': 'Key Stage 5',
+                    'year 12': 'Key Stage 5'
+                }
+
+                for idx, record in enumerate(json_records[:3]):
+                    subject = record.get('subject') or record.get('Subject') or 'Not found'
+                    key_stage = record.get('keyStage') or record.get('key_stage') or record.get('KeyStage')
+
+                    # Check for level conversion
+                    converted_from_level = False
+                    if not key_stage:
+                        level = record.get('level') or record.get('Level')
+                        if level:
+                            level_normalized = str(level).lower().strip()
+                            key_stage = level_to_keystage_preview.get(level_normalized, 'Unknown level')
+                            converted_from_level = True if key_stage != 'Unknown level' else False
+                        else:
+                            key_stage = 'Not found'
+
+                    metadata_preview.append({
+                        'Record': idx + 1,
+                        'Subject': subject,
+                        'Key Stage': key_stage,
+                        'Source': 'Converted from level' if converted_from_level else 'Direct from JSON'
+                    })
+
+                preview_df = pd.DataFrame(metadata_preview)
+                st.dataframe(preview_df, hide_index=True, use_container_width=True)
+
+                if len(json_records) > 3:
+                    st.info(f"Preview shows metadata for first 3 of {len(json_records)} records")
+
                 # Generation details input
                 st.write('### Enter generation details for all records')
                 json_generation_details = st.text_input(
                     "This will help you differentiate your data from other entries "
                     "in the lesson plans table when creating a dataset.",
                     key="json_gen_details",
-                    value="LLM_Generated_Lesson_Plan"
+                    value=""
                 )
 
                 # Insert button
                 if st.button('Insert JSON Data into Database', key="json_insert"):
                     queries_and_params = []
 
+                    # Level to Key Stage conversion mapping
+                    level_to_keystage = {
+                        'kindergarten': 'Key Stage 1',
+                        'pre-primary': 'Key Stage 1',
+                        'year 1': 'Key Stage 1',
+                        'year 2': 'Key Stage 1',
+                        'year 3': 'Key Stage 2',
+                        'year 4': 'Key Stage 2',
+                        'year 5': 'Key Stage 2',
+                        'year 6': 'Key Stage 2',
+                        'year 7': 'Key Stage 3',
+                        'year 8': 'Key Stage 3',
+                        'year 9': 'Key Stage 3',
+                        'year 10': 'Key Stage 4',
+                        'year 11': 'Key Stage 5',
+                        'year 12': 'Key Stage 5'
+                    }
+
                     for record in json_records:
                         record_id = str(uuid.uuid4())
+
+                        # Extract subject from JSON
+                        subject = record.get('subject') or record.get('Subject') or None
+
+                        # Extract or convert key_stage
+                        key_stage = record.get('keyStage') or record.get('key_stage') or record.get('KeyStage')
+
+                        # If no keyStage found, try to convert from level
+                        if not key_stage:
+                            level = record.get('level') or record.get('Level')
+                            if level:
+                                # Normalize level string for matching
+                                level_normalized = str(level).lower().strip()
+                                key_stage = level_to_keystage.get(level_normalized)
+
+                                if key_stage:
+                                    log_message("info", f"Converted level '{level}' to '{key_stage}'")
+
                         query = """
-                            INSERT INTO public.lesson_plans (id, json, generation_details)
-                            VALUES (%s, %s, %s);
+                            INSERT INTO public.lesson_plans (id, json, generation_details, subject, key_stage)
+                            VALUES (%s, %s, %s, %s, %s);
                         """
-                        params = (record_id, json.dumps(record), json_generation_details)
+                        params = (record_id, json.dumps(record), json_generation_details, subject, key_stage)
                         queries_and_params.append((query, params))
 
                     result_message = execute_multi_query(queries_and_params)

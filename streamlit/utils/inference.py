@@ -372,11 +372,17 @@ def run_inference(
 
     # Route to appropriate inference method based on model type
     if llm_model == "llama":
-        return _run_llama_inference(prompt, llm_model_temp, timeout)
+        result = _run_llama_inference(prompt, llm_model_temp, timeout)
     elif llm_model.startswith("azure-") or llm_model.lower() == "azure":
-        return _run_azure_openai_inference(prompt, llm_model, llm_model_temp, top_p, timeout)
+        result = _run_azure_openai_inference(prompt, llm_model, llm_model_temp, top_p, timeout)
     else:
-        return _run_openai_inference(prompt, llm_model, llm_model_temp, top_p, timeout)
+        result = _run_openai_inference(prompt, llm_model, llm_model_temp, top_p, timeout)
+
+    # Add the input prompt to the result for display in UI
+    if isinstance(result, dict):
+        result["input_prompt"] = prompt
+
+    return result
         
 def handle_inference(
     content: Union[Dict[str, Any], str], 
@@ -546,10 +552,10 @@ def run_test(
 
                 # Run inference
                 output = handle_inference(
-                    content, prompt_id, llm_model, llm_model_temp, 
+                    content, prompt_id, llm_model, llm_model_temp,
                     timeout, experiment_id, lesson_plan_id, top_p
                 )
-                
+
                 if output is None:
                     log_message("warning", f"Skipping lesson {i+1}: Inference failed")
                     failed_inferences += 1
@@ -558,8 +564,19 @@ def run_test(
                 # Update UI
                 with status_placeholder.container():
                     st.write(f'Inference Status: {output["status"]} (Lesson {i+1}/{total_lessons})')
-                    
+
+                # Display input prompt used for evaluation
+                if output.get("input_prompt"):
+                    with st.expander(f"📝 Input Prompt Used (Lesson {i+1})", expanded=False):
+                        st.text_area(
+                            "Prompt sent to AI model:",
+                            output["input_prompt"],
+                            height=300,
+                            key=f"input_prompt_{prompt_id}_{lesson_plan_id}_{i}"
+                        )
+
                 with response_placeholder.container():
+                    st.write("**Evaluation Result:**")
                     st.write(output.get("response", {}))
                     
                 # Log success

@@ -58,7 +58,7 @@ def fetch_lesson_plan_sets(limit=None):
         print(f"An error occurred: {e}")
         return None
     
-def fetch_sample_sets(limit=5):
+def fetch_sample_sets(limit=2):
     """
     Fetch the contents of the lesson_plan_sets table and load into a pandas DataFrame.
 
@@ -179,7 +179,7 @@ if selection == 'HB_Test_Set':
 
     st.write(lessons_df)
 elif selection == 'Model_Compare_Set_10':
-    lessons_df = fetch_sample_sets(5)
+    lessons_df = fetch_sample_sets(2)
     lessons_df['key_stage'] = lessons_df['key_stage'].replace(['KS1', 'KS2', 'KS3', 'KS4'], ['Key Stage 1', 'Key Stage 2', 'Key Stage 3', 'Key Stage 4'])
 
     st.write(lessons_df)
@@ -269,9 +269,15 @@ st.session_state.top_p = st.number_input(
     help='Minimum value is 0.0, maximum value is 1.00.'
 )
 
+# Initialize session state for storing generated lesson plans
+if 'generated_lessons' not in st.session_state:
+    st.session_state.generated_lessons = []
+
 # Usage in Streamlit form
 with st.form(key='generation_form'):
     if st.form_submit_button('Start Generation'):
+        # Clear previous generation data
+        st.session_state.generated_lessons = []
         for llm_model in llm_models:
             for index, row in lessons_df.iterrows():
                 # Replace placeholders with actual values in the prompt
@@ -408,7 +414,102 @@ with st.form(key='generation_form'):
                 # st.write(f"Selection: {selection}")
                 generation_details_value = llm_model + '_' + str(llm_model_temp) + '_' + selection + '_' + str(st.session_state.top_p)
                 st.write(f"Generation Details: {generation_details_value}")
+
+                # Store generated lesson plan for download
+                st.session_state.generated_lessons.append({
+                    'lesson_plan_id': None,  # Will be updated after DB insert
+                    'lesson_id': lesson_id,
+                    'key_stage': row['key_stage'],
+                    'subject': row['subject'],
+                    'lesson_title': row['lesson_title'],
+                    'model': llm_model,
+                    'temperature': llm_model_temp,
+                    'top_p': st.session_state.top_p,
+                    'generation_details': generation_details_value,
+                    'lesson_plan_json': response if isinstance(response, dict) else json.loads(response_cleaned),
+                    'lesson_plan_raw': response_cleaned
+                })
+
                 # Insert the generated lesson plan into the database
                 lesson_plan_id = insert_single_lesson_plan(response_cleaned,lesson_id, row['key_stage'], row['subject'],  generation_details_value)
+
+                # Update the stored lesson with the database ID
+                if st.session_state.generated_lessons:
+                    st.session_state.generated_lessons[-1]['lesson_plan_id'] = lesson_plan_id
+
                 # Display the lesson plan ID in the Streamlit app
                 st.write(f"Lesson Plan ID: {lesson_plan_id}")
+
+# Download buttons for generated lesson plans
+if st.session_state.generated_lessons:
+    st.markdown("---")
+    st.markdown("## 📥 Download Generated Lesson Plans")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        # CSV Download
+        st.markdown("### Download as CSV")
+        csv_data = []
+        for lesson in st.session_state.generated_lessons:
+            csv_data.append({
+                'Lesson Plan ID': lesson['lesson_plan_id'],
+                'Lesson ID': lesson['lesson_id'],
+                'Key Stage': lesson['key_stage'],
+                'Subject': lesson['subject'],
+                'Lesson Title': lesson['lesson_title'],
+                'Model': lesson['model'],
+                'Temperature': lesson['temperature'],
+                'Top P': lesson['top_p'],
+                'Generation Details': lesson['generation_details'],
+                'Lesson Plan JSON': lesson['lesson_plan_raw']
+            })
+
+        df_download = pd.DataFrame(csv_data)
+        csv = df_download.to_csv(index=False).encode('utf-8')
+
+        st.download_button(
+            label="📄 Download CSV",
+            data=csv,
+            file_name=f"lesson_plans_{selection}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv",
+            help="Download all generated lesson plans as a CSV file"
+        )
+
+    with col2:
+        # JSON Download
+        st.markdown("### Download as JSON")
+        json_data = {
+            'metadata': {
+                'generated_at': pd.Timestamp.now().isoformat(),
+                'selection': selection,
+                'total_lessons': len(st.session_state.generated_lessons)
+            },
+            'lesson_plans': []
+        }
+
+        for lesson in st.session_state.generated_lessons:
+            json_data['lesson_plans'].append({
+                'lesson_plan_id': lesson['lesson_plan_id'],
+                'lesson_id': lesson['lesson_id'],
+                'key_stage': lesson['key_stage'],
+                'subject': lesson['subject'],
+                'lesson_title': lesson['lesson_title'],
+                'model': lesson['model'],
+                'temperature': lesson['temperature'],
+                'top_p': lesson['top_p'],
+                'generation_details': lesson['generation_details'],
+                'lesson_plan': lesson['lesson_plan_json']
+            })
+
+        json_str = json.dumps(json_data, indent=2)
+
+        st.download_button(
+            label="📋 Download JSON",
+            data=json_str,
+            file_name=f"lesson_plans_{selection}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json",
+            help="Download all generated lesson plans as a JSON file"
+        )
+
+    st.info(f"💡 You have {len(st.session_state.generated_lessons)} lesson plan(s) ready to download.")

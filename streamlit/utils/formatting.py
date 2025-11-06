@@ -140,9 +140,17 @@ def standardize_key_stage(ks):
 def standardize_subject(subj):
     """Standardizes subject labels."""
     if isinstance(subj, str):
-        subj = subj.strip().lower()
-        return SUBJECT_MAPPINGS.get(subj, "Other")
-    return "Other"  # Return as is if not a string
+        subj_lower = subj.strip().lower()
+        # Return mapped value if exists
+        if subj_lower in SUBJECT_MAPPINGS:
+            return SUBJECT_MAPPINGS[subj_lower]
+        elif subj_lower and subj_lower not in ['none', 'null', 'n/a', '', 'other']:
+            # Keep the original subject with its original casing
+            # This preserves "Health and Physical Education" as-is
+            return subj.strip()
+        else:
+            return "Other"
+    return "Other"  # Return "Other" if not a string or None
 
 def convert_to_json(text):
     """
