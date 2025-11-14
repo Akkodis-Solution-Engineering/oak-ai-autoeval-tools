@@ -375,26 +375,33 @@ if prompt_title_selection is not None:
                 llm_model_temp = 0.5
 
 
+                # Parse and format the lesson plan JSON for better readability
+                try:
+                    lesson_plan_dict = json.loads(lesson_plan_json)
+                    formatted_lesson_plan = json.dumps(lesson_plan_dict, indent=2)
+                except json.JSONDecodeError:
+                    # If parsing fails, use the original string
+                    formatted_lesson_plan = lesson_plan_json
+
                 improvement_prompt = (
-                "You are an expert lesson plan improvement agent." 
-                +"You will be provided with a lesson plan that has received a low score due to failing to meet the required standards. "
-                +"Your task is to improve the lesson plan by making necessary changes to improve the lesson plan.\n\n"
-                + "Here is the lesson plan:\n\n  "
-                + lesson_plan_json
-                + "\n\n"
-                +"The lesson plan has received the following review:\n\n  "
-                + "\n\n"
-                + st.session_state.justifications
-                + "\n\n  Please make necessary changes to improve the lesson plan. "
-                + "Adhere to the original formatting and just return the json of the lesson plan. "
-                + "Do not include your reasoning in your response. "
-                + "Only edit the parts of the lesson plan that need improvement based on the review. "
-                + "You should respond only with a valid JSON document. "
-                + "Ensure that each key in the JSON corresponds exactly to the keys in the provided lesson plan. "
-                + "Do not alter the formatting in any way. "
-                + "Avoid introducing line break characters.\n\n  "
-                
-                
+                    "You are an expert lesson plan improvement agent. "
+                    "You will be provided with a lesson plan that has received a low score due to failing to meet the required standards. "
+                    "Your task is to improve the lesson plan by making necessary changes to improve the lesson plan.\n\n"
+                    "Here is the lesson plan:\n\n"
+                    "```json\n"
+                    + formatted_lesson_plan
+                    + "\n```\n\n"
+                    "The lesson plan has received the following review:\n\n"
+                    + st.session_state.justifications
+                    + "\n\n"
+                    "Please make necessary changes to improve the lesson plan. "
+                    "Adhere to the original formatting and just return the json of the lesson plan. "
+                    "Do not include your reasoning in your response. "
+                    "Only edit the parts of the lesson plan that need improvement based on the review. "
+                    "You should respond only with a valid JSON document. "
+                    "Ensure that each key in the JSON corresponds exactly to the keys in the provided lesson plan. "
+                    "Do not alter the formatting in any way. "
+                    "Avoid introducing line break characters.\n\n"
             )
                 with st.expander('Improvement Prompt'):
                     st.markdown(improvement_prompt)
@@ -413,9 +420,9 @@ if prompt_title_selection is not None:
                 tracked= False
                 llm_model_temp = 1
                 llm_model = 'gpt-4o'
-                judge_llm_model = 'gpt-4o'
+                judge_llm_model = 'azure-openai'
                 #make a selection for llm model selection
-                llm_model = st.selectbox("Select an LLM Model for improvement", ['gpt-4o', 'gpt-4o-mini','o1-preview-2024-09-12','o1-mini-2024-09-12',], index=0, key=None)
+                llm_model = st.selectbox("Select an LLM Model for improvement", ['azure-openai','gpt-4o', 'gpt-4o-mini','o1-preview-2024-09-12','o1-mini-2024-09-12',], index=0, key=None)
 
                 # experiment_id = None
 

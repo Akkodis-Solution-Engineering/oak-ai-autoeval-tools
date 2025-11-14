@@ -614,46 +614,72 @@ def run_test(
 
 
 def run_agent_openai_inference(
-    prompt: str, 
-    llm_model: str, 
-    llm_model_temp: float, 
+    prompt: str,
+    llm_model: str,
+    llm_model_temp: float,
     timeout: int = 150
 ) -> Dict[str, Any]:
-    """Run OpenAI inference with timing and comprehensive error handling.
-    
+    """Run OpenAI or Azure OpenAI inference with timing and comprehensive error handling.
+
     Args:
         prompt: The prompt to send to the model
-        llm_model: Model name to use
+        llm_model: Model name to use (or "azure" for Azure OpenAI)
         llm_model_temp: Temperature setting
         timeout: Request timeout in seconds (default: 150)
-        
+
     Returns:
         Dictionary containing response, status, and response time
     """
     start_time = time.time()
     duration = 0.0
-    
+
     try:
-        # Get API key from environment
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable not set")
-            
-        client = OpenAI(api_key=api_key, timeout=timeout)
-        
-        response = client.chat.completions.create(
-            model=llm_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=llm_model_temp,
-            top_p=1.0,
-            frequency_penalty=0,
-            presence_penalty=0,
-        )
-        
+        # Check if using Azure OpenAI
+        if llm_model.startswith("azure-") or llm_model.lower() == "azure":
+            # Azure OpenAI configuration
+            api_key = get_env_variable("AZURE_OPENAI_API_KEY")
+            endpoint = get_env_variable("AZURE_OPENAI_ENDPOINT")
+            api_version = get_env_variable("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
+            deployment = get_env_variable("AZURE_OPENAI_DEPLOYMENT_NAME")
+
+            log_message("info", f"Using Azure OpenAI - Deployment: {deployment}")
+
+            client = AzureOpenAI(
+                api_key=api_key,
+                api_version=api_version,
+                azure_endpoint=endpoint,
+                timeout=timeout
+            )
+
+            response = client.chat.completions.create(
+                model=deployment,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=llm_model_temp,
+                top_p=1.0,
+                frequency_penalty=0,
+                presence_penalty=0,
+            )
+        else:
+            # Standard OpenAI configuration
+            api_key = os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY environment variable not set")
+
+            client = OpenAI(api_key=api_key, timeout=timeout)
+
+            response = client.chat.completions.create(
+                model=llm_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=llm_model_temp,
+                top_p=1.0,
+                frequency_penalty=0,
+                presence_penalty=0,
+            )
+
         message = response.choices[0].message.content
         end_time = time.time()
         duration = end_time - start_time
-        
+
         cleaned_content, status = clean_response(message)
         return {
             "response": cleaned_content,
@@ -664,7 +690,7 @@ def run_agent_openai_inference(
     except Exception as e:
         end_time = time.time()
         duration = end_time - start_time
-        
+
         log_message("error", f"Unexpected error during agent inference: {e}")
         return {
             "response": {

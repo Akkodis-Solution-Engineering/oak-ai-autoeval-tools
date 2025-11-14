@@ -16,6 +16,13 @@ from utils.common_utils import log_message
 from utils.formatting import convert_to_json
 from utils.db_scripts import execute_multi_query
 
+# System-generated fields to exclude when uploading JSON
+SYSTEM_GENERATED_FIELDS = {
+    '_id', 'id', 'index', 'deleted', 'duration', '_ts',
+    'createdUtc', 'modifiedUtc', 'createdBy', 'modifiedBy',
+    'parentId', 'docType', 'generatedBy', 'school', 'curriculum'
+}
+
 
 # Set page configuration
 st.set_page_config(page_title="Upload Content", page_icon="⬆️")
@@ -254,6 +261,17 @@ with upload_tab2:
                     for record in json_records:
                         record_id = str(uuid.uuid4())
 
+                        # Clean the record by removing system-generated fields
+                        cleaned_record = {
+                            k: v for k, v in record.items()
+                            if k not in SYSTEM_GENERATED_FIELDS
+                        }
+
+                        # Log removed fields for transparency
+                        removed_fields = [k for k in record.keys() if k in SYSTEM_GENERATED_FIELDS]
+                        if removed_fields:
+                            log_message("info", f"Removed system fields: {', '.join(removed_fields)}")
+
                         # Extract subject from JSON
                         subject = record.get('subject') or record.get('Subject') or None
 
@@ -275,7 +293,7 @@ with upload_tab2:
                             INSERT INTO public.lesson_plans (id, json, generation_details, subject, key_stage)
                             VALUES (%s, %s, %s, %s, %s);
                         """
-                        params = (record_id, json.dumps(record), json_generation_details, subject, key_stage)
+                        params = (record_id, json.dumps(cleaned_record), json_generation_details, subject, key_stage)
                         queries_and_params.append((query, params))
 
                     result_message = execute_multi_query(queries_and_params)

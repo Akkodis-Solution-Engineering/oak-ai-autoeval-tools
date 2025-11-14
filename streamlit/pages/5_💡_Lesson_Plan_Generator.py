@@ -191,14 +191,12 @@ else:
 
 
 if 'llm_model' not in st.session_state: 
-    st.session_state.llm_model = 'gpt-4o-2024-05-13'
+    st.session_state.llm_model = 'azure-openai'
 if 'llm_model_temp' not in st.session_state:
     st.session_state.llm_model_temp = 0.1
 
 
-llm_model_options = ['o1-preview-2024-09-12','o1-mini-2024-09-12','gpt-4o-mini-2024-07-18', "gpt-4o",
-    "gpt-4o-mini",'gpt-4o-2024-05-13','gpt-4o-2024-08-06','chatgpt-4o-latest',
-                     'gpt-4-turbo-2024-04-09','gpt-4-0125-preview','gpt-4-1106-preview','azure-openai']
+llm_model_options = ['gpt-4-1106-preview','azure-openai']
 
 # Get default value, ensuring it's in the options list
 default_model = st.session_state.llm_model

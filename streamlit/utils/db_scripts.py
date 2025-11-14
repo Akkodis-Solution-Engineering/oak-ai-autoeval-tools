@@ -265,12 +265,11 @@ def add_lesson_plan_to_sample(sample_id, lesson_plan_id):
     """
     query = """
     INSERT INTO public.m_sample_lesson_plans (
-        sample_id, lesson_plan_id, created_at, updated_at
+        sample_id, lesson_plan_id
     )
-    VALUES (%s, %s, %s, %s);
+    VALUES (%s, %s);
     """
-    now = datetime.now()
-    return execute_single_query(query, (sample_id, lesson_plan_id, now, now))
+    return execute_single_query(query, (sample_id, lesson_plan_id))
 
 
 
