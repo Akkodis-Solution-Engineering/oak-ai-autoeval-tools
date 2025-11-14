@@ -439,7 +439,7 @@ def get_prompts():
 
 
 def get_samples():
-    """ Retrieve samples data from the database.
+    """ Retrieve samples data from the database, excluding temporary samples.
 
     Returns:
         pd.DataFrame: DataFrame with samples data.
@@ -454,6 +454,8 @@ def get_samples():
             m_samples m
         LEFT JOIN
             m_sample_lesson_plans l ON m.id = l.sample_id
+        WHERE
+            m.sample_title != 'temp_sample'
         GROUP BY
             m.id, m.sample_title, m.created_at
             order by m.created_at desc;
@@ -882,34 +884,85 @@ def fetch_prompt_objectives_desc():
         return None
 
 
-def fetch_bad_lesson_plans(selected_prompt_ids):
+def fetch_experiments_list():
+    """ Fetch list of experiments for filtering, excluding temporary experiments.
+
+    Returns:
+        pd.DataFrame: DataFrame containing experiment details.
+    """
     try:
-        conn = get_db_connection()  
-        query = """SELECT 
-                    r.prompt_id, 
-                    r.lesson_plan_id, 
+        conn = get_db_connection()
+        query = """
+        SELECT
+            ex.id,
+            ex.experiment_name,
+            ex.created_at,
+            ex.created_by,
+            t.name as teacher_name,
+            ex.tracked
+        FROM public.m_experiments ex
+        LEFT JOIN m_teachers t ON t.id::text = ex.created_by
+        WHERE ex.status = 'COMPLETE'
+        AND ex.experiment_name != 'temp_experiment'
+        ORDER BY ex.created_at DESC
+        """
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        return df
+    except Exception as e:
+        print(f"An error occurred while fetching experiments: {e}")
+        return None
+
+
+def fetch_bad_lesson_plans(selected_prompt_ids, experiment_id=None):
+    """ Fetch lesson plans with low scores based on selected prompt IDs and optionally filter by experiment.
+
+    Args:
+        selected_prompt_ids (tuple): Tuple of prompt IDs to filter by.
+        experiment_id (int, optional): Experiment ID to filter results. If None, fetch from all experiments.
+
+    Returns:
+        pd.DataFrame: DataFrame containing lesson plan results.
+    """
+    try:
+        conn = get_db_connection()
+
+        # Base query
+        query = """SELECT
+                    r.prompt_id,
+                    r.lesson_plan_id,
                     lp.generation_details,
                     p.prompt_title,
-                    min(CAST(r.result AS numeric)) AS min_result, 
+                    min(CAST(r.result AS numeric)) AS min_result,
                     max(CAST(r.result AS numeric)) AS max_result,
                     count(r.justification) AS justification_count,
                     COUNT(CASE WHEN CAST(r.result AS numeric) = 1 THEN 1 END) AS score_1_count,
                     COUNT(CASE WHEN CAST(r.result AS numeric) = 2 THEN 1 END) AS score_2_count,
                     COUNT(CASE WHEN CAST(r.result AS numeric) = 3 THEN 1 END) AS score_3_count,
-                    COUNT(CASE WHEN CAST(r.result AS numeric) = 4 THEN 1 END) AS score_4_count, 
+                    COUNT(CASE WHEN CAST(r.result AS numeric) = 4 THEN 1 END) AS score_4_count,
                     COUNT(CASE WHEN CAST(r.result AS numeric) = 5 THEN 1 END) AS score_5_count
                 FROM public.m_results r
                 INNER JOIN m_prompts p ON p.id = r.prompt_id
                 INNER JOIN lesson_plans lp ON lp.id = r.lesson_plan_id
-                WHERE r.status = 'SUCCESS' AND r.result ~ '^[0-9\\.]+$' AND p.output_format = 'Score' 
+                WHERE r.status = 'SUCCESS' AND r.result ~ '^[0-9\\.]+$' AND p.output_format = 'Score'
                 AND p.prompt_title <> 'Answers Are Minimally Different'
-                AND r.prompt_id IN %s
+                AND r.prompt_id IN %s"""
+
+        # Add experiment filter if provided
+        if experiment_id is not None:
+            query += " AND r.experiment_id = %s"
+            params = (selected_prompt_ids, experiment_id)
+        else:
+            params = (selected_prompt_ids,)
+
+        query += """
                 GROUP BY r.lesson_plan_id, r.prompt_id, p.prompt_title, lp.generation_details
                 ORDER BY lesson_plan_id DESC, justification_count DESC, max_result ASC;"""
-        df = pd.read_sql_query(query, conn, params=(selected_prompt_ids,))
+
+        df = pd.read_sql_query(query, conn, params=params)
         conn.close()
         return df
-    
+
     except Exception as e:
         print(f"An error occurred while fetching lesson plans: {e}")
         return None
@@ -985,6 +1038,44 @@ def delete_lesson_plans_from_sample_lesson_plans(sample_id):
         return True
     except Exception as e:
         print(f"An error occurred while deleting the sample lesson plans: {e}")
+        return False
+
+
+def delete_experiment(experiment_id):
+    """ Delete an experiment and its results from the database.
+
+    Args:
+        experiment_id (int): ID of the experiment to delete.
+
+    Returns:
+        bool: True if successful, False otherwise.
+    """
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # Delete results first (foreign key constraint)
+        delete_results_query = """
+        DELETE FROM public.m_results
+        WHERE experiment_id = %s
+        """
+        cur.execute(delete_results_query, (experiment_id,))
+
+        # Delete the experiment
+        delete_experiment_query = """
+        DELETE FROM public.m_experiments
+        WHERE id = %s
+        """
+        cur.execute(delete_experiment_query, (experiment_id,))
+
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"An error occurred while deleting the experiment: {e}")
+        if conn:
+            conn.rollback()
+            conn.close()
         return False
     
 
