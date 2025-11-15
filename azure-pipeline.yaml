@@ -53,10 +53,13 @@ stages:
                   --load
 
                 echo "Image built and pushed: $(imageName1):$(tag), $(gitsha), latest"
+                # Retag local image for other tags
+                docker tag $(imageName1):$(tag) $(imageName1):latest
+                docker tag $(imageName1):$(tag) $(imageName1):$(gitsha)
                 # Tag images for second ACR
                 docker tag $(imageName1):$(tag) $(imageName2):$(tag)
-                docker tag $(imageName1):$(gitsha) $(imageName2):$(gitsha)
-                docker tag $(imageName1):latest $(imageName2):latest
+                docker tag $(imageName1):$(tag) $(imageName2):latest
+                docker tag $(imageName1):$(tag) $(imageName2):$(gitsha)
             # Push to second ACR
           - task: AzureCLI@2
             displayName: 'Push to Second ACR'
