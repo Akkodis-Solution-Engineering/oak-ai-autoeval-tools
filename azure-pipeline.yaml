@@ -6,7 +6,7 @@ trigger: none
 variables:
   imageName1: 'akkodis-b9gjbfgfdrajfrb6.azurecr.io/oak-ai-autoeval'
   imageName2: 'doesrtsensainprdacr-g9bmdpcfapf5ddgp.azurecr.io/oak-ai-autoeval'
-  tag: '$(Build.BuildId)'
+  tag: '$(Build.BuildNumber)'
   gitsha: '$(Build.SourceVersion)'
   acrName: 'akkodis'
   acrName2: 'doesrtsensainprdacr'
