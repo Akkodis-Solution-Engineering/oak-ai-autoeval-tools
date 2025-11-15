@@ -57,16 +57,26 @@ stages:
                 docker tag $IMAGE_ID $(imageName2):latest
 
                 echo "Image built and pushed: $(imageName1):$(tag), $(gitsha), latest"
-            # Push to second ACR
           - task: AzureCLI@2
-            displayName: 'Push to Second ACR'
+            displayName: 'Build and Push to Second ACR'
             inputs:
               azureSubscription: $(azureSubscription2)
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
                 az acr login --name $(acrName2)
-                docker push $(imageName2):$(tag)
-                docker push $(imageName2):$(gitsha)
-                docker push $(imageName2):latest
-                echo "Image also pushed to $(imageName2):$(tag), $(gitsha), latest"
+                docker buildx create --use
+                docker buildx build --platform linux/arm64 \
+                  -t $(imageName2):$(tag) \
+                  -t $(imageName2):$(gitsha) \
+                  -t $(imageName2):latest \
+                  -f Dockerfile \
+                  . \
+                  --push
+                echo "Image built and pushed: $(imageName2):$(tag), $(gitsha), latest"
+                  -t $(imageName2):$(gitsha) \
+                  -t $(imageName2):latest \
+                  -f Dockerfile \
+                  . \
+                  --push
+                echo "Image built and pushed: $(imageName2):$(tag), $(gitsha), latest"
