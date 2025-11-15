@@ -43,13 +43,14 @@ stages:
                 docker buildx create --use || true
 
                 # Build and push multi-platform image (ARM64 + AMD64)
-                docker buildx build --platform linux/arm64,linux/amd64 \
+                docker buildx build --platform linux/arm64 \
                   -t $(imageName1):$(tag) \
                   -t $(imageName1):$(gitsha) \
                   -t $(imageName1):latest \
                   -f Dockerfile \
                   . \
-                  --push
+                  --push \
+                  --load
 
                 echo "Image built and pushed: $(imageName1):$(tag), $(gitsha), latest"
                 # Tag images for second ACR
