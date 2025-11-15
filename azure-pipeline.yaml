@@ -4,11 +4,14 @@
 trigger: none
 
 variables:
-  imageName1: 'akkodis-b9gjbfgfdrajfrb6.azurecr.io/oak-ai-autoeval'  # Update ACR registry and image name as needed
+  imageName1: 'akkodis-b9gjbfgfdrajfrb6.azurecr.io/oak-ai-autoeval'
+  imageName2: 'doesrtsensainprdacr-g9bmdpcfapf5ddgp.azurecr.io/oak-ai-autoeval'
   tag: '$(Build.BuildId)'
   gitsha: '$(Build.SourceVersion)'
   acrName: 'akkodis'
+  acrName2: 'doesrtsensainprdacr'
   azureSubscription: 'Akkodis SensAI'
+  azureSubscription2: 'DOE-ICT-DEVTEST'
 
 stages:
   - stage: BuildAndPushContainer
@@ -49,3 +52,20 @@ stages:
                   --push
 
                 echo "Image built and pushed: $(imageName1):$(tag), $(gitsha), latest"
+                # Tag images for second ACR
+                docker tag $(imageName1):$(tag) $(imageName2):$(tag)
+                docker tag $(imageName1):$(gitsha) $(imageName2):$(gitsha)
+                docker tag $(imageName1):latest $(imageName2):latest
+            # Push to second ACR
+          - task: AzureCLI@2
+            displayName: 'Push to Second ACR'
+            inputs:
+              azureSubscription: $(azureSubscription2)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az acr login --name $(acrName2)
+                docker push $(imageName2):$(tag)
+                docker push $(imageName2):$(gitsha)
+                docker push $(imageName2):latest
+                echo "Image also pushed to $(imageName2):$(tag), $(gitsha), latest"
