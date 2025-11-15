@@ -140,9 +140,17 @@ def standardize_key_stage(ks):
 def standardize_subject(subj):
     """Standardizes subject labels."""
     if isinstance(subj, str):
-        subj = subj.strip().lower()
-        return SUBJECT_MAPPINGS.get(subj, "Other")
-    return "Other"  # Return as is if not a string
+        subj_lower = subj.strip().lower()
+        # Return mapped value if exists
+        if subj_lower in SUBJECT_MAPPINGS:
+            return SUBJECT_MAPPINGS[subj_lower]
+        elif subj_lower and subj_lower not in ['none', 'null', 'n/a', '', 'other']:
+            # Keep the original subject with its original casing
+            # This preserves "Health and Physical Education" as-is
+            return subj.strip()
+        else:
+            return "Other"
+    return "Other"  # Return "Other" if not a string or None
 
 def convert_to_json(text):
     """
@@ -310,6 +318,8 @@ def clean_response(response_text):
             decoded JSON object or an error message in case of failure, 
             and a status string ("SUCCESS" or "FAILURE").
     """
+    from utils.common_utils import log_message
+
     try:
         raw_content = response_text.strip()
         if raw_content.startswith("```json"):
@@ -323,11 +333,18 @@ def clean_response(response_text):
         start_snippet = max(0, error_position - 40)
         end_snippet = min(len(response_text), error_position + 40)
         snippet = response_text[start_snippet:end_snippet]
+
+        # Log the full raw response for debugging
+        log_message("error", f"JSON Decode Error: {e}")
+        log_message("error", f"Raw LLM Response (first 500 chars): {response_text[:500]}")
+        log_message("error", f"Problematic snippet at position {error_position}: {repr(snippet)}")
+
         return {
             "result": None,
             "justification": (
                 f"{ErrorMessages.UNEXPECTED_ERROR}: {e}. "
-                f"Problematic snippet: {repr(snippet)}"
+                f"Problematic snippet: {repr(snippet)}. "
+                f"Raw response preview: {response_text[:200]}"
             )
         }, "FAILURE"
 

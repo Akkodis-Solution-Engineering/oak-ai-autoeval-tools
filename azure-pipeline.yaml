@@ -1,0 +1,51 @@
+
+# azure-pipelines.yml
+
+trigger: none
+
+variables:
+  imageName1: 'akkodis-b9gjbfgfdrajfrb6.azurecr.io/oak-ai-autoeval'  # Update ACR registry and image name as needed
+  tag: '$(Build.BuildId)'
+  gitsha: '$(Build.SourceVersion)'
+  acrName: 'akkodis'
+  azureSubscription: 'Akkodis SensAI'
+
+stages:
+  - stage: BuildAndPushContainer
+    displayName: Build and Push Python Tools Docker Image
+    jobs:
+      - job: Build
+        displayName: Build and Push
+        pool:
+          name: 'ARM64'  # Ensure this matches your Azure DevOps agent pool name
+        steps:
+          - checkout: self
+
+          - task: DockerInstaller@0
+            displayName: Install Docker Buildx
+            inputs:
+              dockerVersion: '24.0.0'
+
+          - task: AzureCLI@2
+            displayName: 'ACR Login, Build, and Push to ACR'
+            inputs:
+              azureSubscription: $(azureSubscription)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                # Login to Azure Container Registry
+                az acr login --name $(acrName)
+
+                # Create and use buildx builder for multi-platform builds
+                docker buildx create --use || true
+
+                # Build and push multi-platform image (ARM64 + AMD64)
+                docker buildx build --platform linux/arm64,linux/amd64 \
+                  -t $(imageName1):$(tag) \
+                  -t $(imageName1):$(gitsha) \
+                  -t $(imageName1):latest \
+                  -f Dockerfile \
+                  . \
+                  --push
+
+                echo "Image built and pushed: $(imageName1):$(tag), $(gitsha), latest"

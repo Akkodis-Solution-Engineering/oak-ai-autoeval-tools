@@ -85,9 +85,24 @@ def new_prompts_table():
             objective_title TEXT,
             objective_desc TEXT,
             created_by TEXT,
-            version TEXT);
+            version TEXT,
+            preferred BOOLEAN DEFAULT FALSE);
     """
     execute_single_query(query)
+
+    # Add preferred column if it doesn't exist (for existing tables)
+    alter_query = """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'm_prompts' AND column_name = 'preferred'
+            ) THEN
+                ALTER TABLE m_prompts ADD COLUMN preferred BOOLEAN DEFAULT FALSE;
+            END IF;
+        END $$;
+    """
+    execute_single_query(alter_query)
 
 
 def new_obj_prompt_table():
@@ -274,16 +289,21 @@ def new_lesson_plans_table():
     execute_single_query(query)
 
 
-def insert_lesson_plan():
+def insert_lesson_plan(data_path="data/"):
     """ Inserts a sample lesson plan into the 'lesson_plans' table from
     a JSON file.
 
+    Args:
+        data_path: Path to the data directory containing sample_lesson.json
+
     Returns:
-        str: Success message or error message indicating the result of the 
+        str: Success message or error message indicating the result of the
         operation.
     """
     try:
-        with open("data/sample_lesson.json", "r", encoding="utf-8") as file:
+        import os
+        json_file = os.path.join(data_path, "sample_lesson.json")
+        with open(json_file, "r", encoding="utf-8") as file:
             json_data = file.read()
 
         id_value = uuid.uuid4()
@@ -343,25 +363,38 @@ def insert_sample_prompt(csv_file_path):
                         rating_criteria, general_criteria_note,
                         rating_instruction, experiment_description,
                         objective_title, objective_desc, created_by,
-                        version, created_at, updated_at)
+                        version, preferred, created_at, updated_at)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, now(), now());
+                        %s, %s, %s, now(), now());
                 """
+                # Convert lists/dicts to JSON strings for PostgreSQL
+                lesson_plan_params = prompt_data["lesson_plan_params"]
+                if isinstance(lesson_plan_params, (list, dict)):
+                    lesson_plan_params = json.dumps(lesson_plan_params)
+
+                rating_criteria = prompt_data["rating_criteria"]
+                if isinstance(rating_criteria, (list, dict)):
+                    rating_criteria = json.dumps(rating_criteria)
+
+                # Get preferred value, default to False if not present
+                preferred = prompt_data.get("preferred", False)
+
                 params = (
                     prompt_data["id"],
                     prompt_data["prompt_title"],
                     prompt_data["prompt_objective"],
                     prompt_hash,
                     prompt_data["output_format"],
-                    prompt_data["lesson_plan_params"],
-                    prompt_data["rating_criteria"],
+                    lesson_plan_params,
+                    rating_criteria,
                     prompt_data["general_criteria_note"],
                     prompt_data["rating_instruction"],
                     prompt_data["experiment_description"],
                     prompt_data["objective_title"],
                     prompt_data["objective_desc"],
                     prompt_data["created_by"],
-                    prompt_data["version"]
+                    prompt_data["version"],
+                    preferred
                 )
 
                 queries_and_params.append((query, params))
@@ -420,11 +453,15 @@ def initialize_database(csv_file_path):
     new_batches_table()
     new_teachers_table()
     new_lesson_plans_table()
-    insert_lesson_plan()
+    insert_lesson_plan(csv_file_path)
     add_teacher("John Doe")
     insert_sample_prompt(sample_prompts_path)
     new_lesson_sets_table(sample_lesson_set_path)
 
 
 if __name__ == "__main__":
-    initialize_database("data/")
+    # Determine the correct data path based on where the script is run from
+    import os
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    data_path = os.path.join(script_dir, "data/")
+    initialize_database(data_path)
