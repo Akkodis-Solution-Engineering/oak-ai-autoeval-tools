@@ -45,21 +45,17 @@ stages:
                 # Build and push multi-platform image (ARM64 + AMD64)
                 docker buildx build --platform linux/arm64 \
                   -t $(imageName1):$(tag) \
-                  -t $(imageName1):$(gitsha) \
-                  -t $(imageName1):latest \
                   -f Dockerfile \
                   . \
                   --push \
                   --load
+                docker tag $(imageName1):$(tag) $(imageName1):$(gitsha)
+                docker tag $(imageName1):$(tag) $(imageName1):latest
+                docker tag $(imageName1):$(tag) $(imageName2):$(tag)
+                docker tag $(imageName1):$(tag) $(imageName2):$(gitsha)
+                docker tag $(imageName1):$(tag) $(imageName2):latest
 
                 echo "Image built and pushed: $(imageName1):$(tag), $(gitsha), latest"
-                # Retag local image for other tags
-                docker tag $(imageName1):$(tag) $(imageName1):latest
-                docker tag $(imageName1):$(tag) $(imageName1):$(gitsha)
-                # Tag images for second ACR
-                docker tag $(imageName1):$(tag) $(imageName2):$(tag)
-                docker tag $(imageName1):$(tag) $(imageName2):latest
-                docker tag $(imageName1):$(tag) $(imageName2):$(gitsha)
             # Push to second ACR
           - task: AzureCLI@2
             displayName: 'Push to Second ACR'
