@@ -82,7 +82,7 @@ def get_db_connection():
     try:
         # Check if connecting to Azure PostgreSQL (requires SSL)
         host = get_env_variable("DB_HOST")
-        is_azure = "azure.com" in host if host else False
+        is_azure = host.endswith(".azure.com") or host == "azure.com" if host else False
 
         conn = psycopg2.connect(
             dbname=get_env_variable("DB_NAME"),
