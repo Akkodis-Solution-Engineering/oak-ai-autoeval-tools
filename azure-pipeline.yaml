@@ -49,11 +49,12 @@ stages:
                   . \
                   --push \
                   --load
-                docker tag $(imageName1):$(tag) $(imageName1):$(gitsha)
-                docker tag $(imageName1):$(tag) $(imageName1):latest
-                docker tag $(imageName1):$(tag) $(imageName2):$(tag)
-                docker tag $(imageName1):$(tag) $(imageName2):$(gitsha)
-                docker tag $(imageName1):$(tag) $(imageName2):latest
+                IMAGE_ID=$(docker images --format "{{.ID}}" $(imageName1):$(tag) | head -n 1)
+                docker tag $IMAGE_ID $(imageName1):$(gitsha)
+                docker tag $IMAGE_ID $(imageName1):latest
+                docker tag $IMAGE_ID $(imageName2):$(tag)
+                docker tag $IMAGE_ID $(imageName2):$(gitsha)
+                docker tag $IMAGE_ID $(imageName2):latest
 
                 echo "Image built and pushed: $(imageName1):$(tag), $(gitsha), latest"
             # Push to second ACR
