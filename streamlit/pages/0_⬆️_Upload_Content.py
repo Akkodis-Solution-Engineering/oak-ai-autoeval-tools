@@ -18,9 +18,6 @@ from utils.db_scripts import execute_multi_query
 
 # System-generated fields to exclude when uploading JSON
 SYSTEM_GENERATED_FIELDS = {
-    '_id', 'id', 'index', 'deleted', 'duration', '_ts',
-    'createdUtc', 'modifiedUtc', 'createdBy', 'modifiedBy',
-    'parentId', 'docType', 'generatedBy', 'school', 'curriculum'
 }
 
 
